@@ -14,6 +14,11 @@ venv/
 # Logs
 *.log
 
+#don't push model and video files
+*.pt
+*.mp4
+
+
 # Docker
 dockerfile
 .dockerignore

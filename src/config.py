@@ -56,6 +56,7 @@ import os
 import argparse
 from dotenv import load_dotenv
 
+
 @dataclass
 class AppConfig:
     """Uygulamanın tüm konfigürasyonlarını tutan sınıf."""
@@ -74,9 +75,10 @@ class AppConfig:
    
     # Girdi/Çıktı Ayarları
     input_video_path: str | int = 0  # 0 webcam demektir
+    output_video_path: str = ""
     
 
-    frame_skip: int = 1  # Her N frame'i işle (FPS artırmak için)
+    frame_skip: int = 10  # Her N frame'i işle (FPS artırmak için)
     target_fps: int = 30
     #... diğer ayarlar ...
 
@@ -102,22 +104,22 @@ def load_configuration() -> AppConfig:
     parser.add_argument("--device", type=str, default=None, choices=choices["device"], help="Kullanılacak cihaz: 'cpu' veya 'cuda'")
     parser.add_argument("--model", type=str, default=None,  choices=choices["model"], help="Kullanılacak modelin yolu (örn: yolov8s.pt)")
     parser.add_argument("--input", type=str, default=None, help="İşlenecek video dosyasının ismi veya '0' (webcam)")
+    parser.add_argument("--input_path", type=str, default=None, help="İşlenecek video dosyasının yolu")
+    parser.add_argument("--output", type=str, default=None, help="İşlenmiş videonun ismi")
+    parser.add_argument("--output_path", type=str, default=None, help="İşlenmiş videonun kaydedildiği dosyasının yolu")
     parser.add_argument("--conf", type=float, default=None, help="Güven eşiği (confidence threshold)")
-    
+
     args = parser.parse_args()
 
     # Adım 3: Hiyerarşiyi uygulayarak nihai konfigürasyonu oluştur
     
     # .env'den veya varsayılandan gelen değeri al, sonra komut satırı ile ez (override)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    model_name = args.model or os.getenv("MODEL_PATH", "yolov8n.pt")
-
-    model_path = os.path.join(project_root, 'models', model_name)
+    model_path, input_video_path, output_video_path = get_paths(args)
     config = AppConfig(
         device=args.device or os.getenv("DEVICE", "cpu"),
         model_path=model_path,
-        input_video_path=args.input or os.getenv("INPUT_VIDEO_PATH", 0),
+        input_video_path=input_video_path,
+        output_video_path=output_video_path,
         confidence_threshold=args.conf or float(os.getenv("CONFIDENCE_THRESHOLD", 0.5)),
     )
 
@@ -128,3 +130,20 @@ def load_configuration() -> AppConfig:
         pass
 
     return config
+
+def get_paths(args):
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    models_path = os.path.join(project_root, 'models')
+    model_name = args.model or os.getenv("MODEL_NAME", "yolov8n.pt")
+    model_path = os.path.join(models_path, model_name)
+
+    input_video_path_from_root = args.input_path or os.getenv("INPUT_VIDEO_PATH", "data/input/videos")
+    input_video_name = args.input or os.getenv("INPUT_VIDEO_NAME", "production_line")
+    input_video_path = os.path.join(project_root, input_video_path_from_root, input_video_name+'.mp4')
+
+    output_video_path_from_root = args.output_path or os.getenv("OUTPUT_VIDEO_PATH", "data/output/videos")
+    output_video_path_name = args.output or os.getenv("OUTPUT_VIDEO_NAME", f"{input_video_name}_detected.mp4")
+    output_video_path = os.path.join(project_root, output_video_path_from_root, output_video_path_name)
+
+    return model_path, input_video_path, output_video_path

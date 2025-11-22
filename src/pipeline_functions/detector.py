@@ -48,7 +48,7 @@ class YOLODetector:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         
         # Model dosyasının varlığını kontrol et (otomatik indirmeyi engellemek için)
-        print("md: ", model_path)
+        print("checking: ", model_path)
         self.model_available_check(model_path)
         
         # YOLO modelini yükle
@@ -83,7 +83,7 @@ class YOLODetector:
         # Her tespit için
         for box in results.boxes:
             # Koordinatlar
-            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
             confidence = float(box.conf[0])
             class_id = int(box.cls[0])
             

@@ -1,56 +1,39 @@
-"""
-Ana video işleme pipeline'ı
-"""
 import cv2
 import time
 import os
-from typing import Optional
+import logging
+from typing import Optional, Tuple
 import numpy as np
 
+# Config, Detector ve Tracker'ın import edildiğini varsayıyoruz
 from config import AppConfig
 from pipeline_functions.detector import YOLODetector
 from pipeline_functions.tracker import SORTTracker
-#from utils import MetricsLogger, setup_logger
 
+# Basit bir logger yapılandırması (Sınav için hayat kurtarır)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class Pipeline:
     """Video işleme pipeline'ı"""
     
-    def __init__(self, config: AppConfig):
+    def __init__(self, detector, tracker):
+        
+        logger.info(f"Pipeline başlatılıyor...")
+        self.detector = detector
+        self.tracker = tracker   
+
+    def process_video(self, input_path: str, output_path: Optional[str] = None, frame_skip: int = 1, show_display: bool = False):
         """
-        Args:
-            config: Config objesi
+        Video dosyasını işle.
+        show_display: False yapılırsa sunucu modunda (GUI olmadan) çalışır.
         """
-        self.config = config
-        
-        # Modüller
-        self.detector = YOLODetector(
-            model_path=config.model_path,
-            confidence_threshold=config.confidence_threshold,
-            device=config.device,
-   #         target_classes=config.target_classes
-        )
-        
-        self.tracker = SORTTracker(
-            max_age=config.max_age,
-            min_hits=config.min_hits,
-            iou_threshold=config.iou_threshold_tracker
-        )
-        
-#        self.logger = setup_logger()
- #       self.metrics = MetricsLogger(log_interval=config.log_interval)
-        
- #       self.logger.info("✅ Pipeline başlatıldı")
-    
-    def process_video(self, input_path: str, output_path: Optional[str] = None):
-        """
-        Video dosyasını işle
-        
-        Args:
-            input_path: Giriş video dosyası
-            output_path: Çıkış video dosyası (None ise sadece metrik topla)
-        """
-        # Video aç
+        if not os.path.exists(input_path):
+            raise FileNotFoundError(f"Giriş videosu bulunamadı: {input_path}")
+
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
             raise ValueError(f"Video açılamadı: {input_path}")
@@ -61,187 +44,95 @@ class Pipeline:
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        # FPS geçersizse varsayılan değer kullan
-        if fps <= 0 or fps > 120:
-            fps = 30.0
-            print(f"⚠️  FPS geçersiz, varsayılan {fps} kullanılıyor")
+        # Güvenli Frame Skip
+        skip_rate = frame_skip # Config'de yoksa 1 al
+        if skip_rate < 1: skip_rate = 1
+
+        output_fps = fps / skip_rate
         
-        # Frame skip kullanılıyorsa FPS'i ayarla
-        output_fps = fps / self.config.frame_skip if self.config.frame_skip > 1 else fps
+        logger.info(f"Video: {width}x{height} @ {fps:.2f}fps -> İşlenen: {output_fps:.2f}fps")
         
-        print(f"📹 Video bilgisi: {width}x{height} @ {fps:.2f}fps (çıkış: {output_fps:.2f}fps), {total_frames} frame")
-        
-        # Video writer
         writer = None
         if output_path:
-            # Windows'ta daha uyumlu codec'ler dene
-            # H264 genellikle en iyi çalışır ama sistemde codec olması gerekir
+            # 1. Klasör Kontrolü (KRİTİK)
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+                logger.info(f"Klasör oluşturuldu: {output_dir}")
+
+            # 2. Codec Denemeleri
             codecs_to_try = [
-                ('H264', cv2.VideoWriter_fourcc(*'H264')),
-                ('XVID', cv2.VideoWriter_fourcc(*'XVID')),
                 ('mp4v', cv2.VideoWriter_fourcc(*'mp4v')),
+                ('avc1', cv2.VideoWriter_fourcc(*'avc1')),
+                ('XVID', cv2.VideoWriter_fourcc(*'XVID')),
             ]
             
-            writer = None
             for codec_name, fourcc in codecs_to_try:
-                writer = cv2.VideoWriter(output_path, fourcc, output_fps, (width, height))
-                if writer.isOpened():
-                    print(f"✅ Video codec: {codec_name}")
+                temp_writer = cv2.VideoWriter(output_path, fourcc, output_fps, (width, height))
+                if temp_writer.isOpened():
+                    writer = temp_writer
+                    logger.info(f"✅ Video codec seçildi: {codec_name}")
                     break
-                else:
-                    writer.release()
-                    writer = None
             
-            if writer is None or not writer.isOpened():
-                raise RuntimeError(f"Video writer başlatılamadı: {output_path}. Codec sorunu olabilir.")
-            
-            print(f"💾 Çıkış dosyası: {output_path}")
-        
+            if not writer:
+                logger.warning("⚠️ Video writer başlatılamadı, kayıt yapılmayacak!")
+
         frame_idx = 0
+        processed_count = 0
         
         try:
+            start_process_time = time.time()
+            
             while True:
                 ret, frame = cap.read()
                 if not ret:
                     break
                 
                 frame_idx += 1
-                
-                # Frame skip (performans için)
-                if frame_idx % self.config.frame_skip != 0:
+                if frame_idx % skip_rate != 0:
                     continue
                 
-                # Frame işle
-                start_time = time.time()
-                processed_frame, num_detections, num_tracks = self.process_frame(frame)
-                processing_time = time.time() - start_time
+                # İşlem
+                t0 = time.time()
+                processed_frame, dets, trks = self.process_frame(frame)
+                dt = time.time() - t0
                 
-                # Metrik kaydet
-#                self.metrics.log_frame(num_detections, num_tracks, processing_time)
+                processed_count += 1
                 
-                # Ekrana göster
-                cv2.imshow('Processed Video', processed_frame)
+                # Basit Loglama (Her 50 karede bir)
+                if processed_count % 50 == 0:
+                    logger.info(f"Frame {frame_idx}/{total_frames} | Det: {dets} | Process Time: {dt*1000:.1f}ms")
+
+                # Görselleştirme (Headless check)
+                if show_display:
+                    cv2.imshow('Pipeline Stream', processed_frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        logger.info("Kullanıcı çıkışı (q)")
+                        break
                 
-                # Yaz
                 if writer:
                     writer.write(processed_frame)
-                
-                # Pencereyi güncelle ve 'q' tuşu ile çıkış kontrolü
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    print("Kullanıcı tarafından durduruldu (q tuşu)")
-                    break
-                
-                # Progress
-                if frame_idx % 100 == 0:
-                    progress = (frame_idx / total_frames) * 100
-                    print(f"Progress: {progress:.1f}% ({frame_idx}/{total_frames})")
-#                    self.logger.info(f"Progress: {progress:.1f}% ({frame_idx}/{total_frames})")
-        
+                    
+        except KeyboardInterrupt:
+            logger.info("İşlem manuel olarak durduruldu (Ctrl+C).")
+            
         finally:
             cap.release()
-            if writer:
-                writer.release()
-                # Video dosyasının düzgün kapatıldığından emin ol
-                time.sleep(0.1)  # Kısa bir bekleme
-            
-            # Pencereyi kapat
+            if writer: writer.release()
             cv2.destroyAllWindows()
             
-            # Final rapor
-#            self.metrics.print_final_report()
-#            self.metrics.save_metrics()
-            
-            if output_path:
-                if os.path.exists(output_path):
-                    file_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
-                    print(f"✅ İşlem tamamlandı - Dosya: {output_path} ({file_size:.2f} MB)")
-                else:
-                    print(f"⚠️  Uyarı: Çıkış dosyası oluşturulamadı: {output_path}")
-            else:
-                print("✅ İşlem tamamlandı")
-#            self.logger.info("✅ İşlem tamamlandı")
-    
-    def process_frame(self, frame: np.ndarray):
-        """
-        Tek bir frame işle
-        
-        Args:
-            frame: BGR formatında görüntü
-            
-        Returns:
-            (processed_frame, num_detections, num_tracks)
-        """
-        # 1. Tespit
+            total_time = time.time() - start_process_time
+            logger.info(f"🏁 İşlem Bitti. Toplam Süre: {total_time:.1f}s | Ortalama FPS: {processed_count/total_time:.2f}")
+
+    def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, int, int]:
+        """Tek kare işleme mantığı"""
+        # Deteksiyon
         detections = self.detector.detect(frame)
-        
-        # 2. İzleme
+        # Takip
         tracks = self.tracker.update(detections)
+        # Çizim
+        viz_frame = self.tracker.draw_tracks(frame, tracks)
         
-        # 3. Görselleştirme
-        processed_frame = self.tracker.draw_tracks(frame, tracks)
-        
-        # Bilgi yazısı
-        info_text = f"Detections: {len(detections)} | Tracks: {len(tracks)}"
-        cv2.putText(processed_frame, info_text, (10, 30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        
-        return processed_frame, len(detections), len(tracks)
-    
-    def process_webcam(self, camera_id: int = 0):
-        """
-        Webcam'den gerçek zamanlı işleme
-        
-        Args:
-            camera_id: Kamera ID'si (varsayılan 0)
-        """
-        cap = cv2.VideoCapture(camera_id)
-        if not cap.isOpened():
-            raise ValueError(f"Kamera açılamadı: {camera_id}")
-        
-#        self.logger.info("🎥 Webcam başlatıldı (Çıkmak için 'q')")
-        
-        try:
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                # Frame işle
-                start_time = time.time()
-                processed_frame, num_detections, num_tracks = self.process_frame(frame)
-                processing_time = time.time() - start_time
-                
-                # FPS göster
-                fps = 1.0 / processing_time if processing_time > 0 else 0
-                fps_text = f"FPS: {fps:.1f}"
-                cv2.putText(processed_frame, fps_text, (10, 70), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                
-                # Göster
-                cv2.imshow('Detection & Tracking', processed_frame)
-                
-                # Çıkış
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-        
-        finally:
-            cap.release()
-            cv2.destroyAllWindows()
-#            self.logger.info("✅ Webcam kapatıldı")
+        return viz_frame, len(detections), len(tracks)
 
-
-def main():
-    """Test için ana fonksiyon"""
-    # Config oluştur
-    config = AppConfig()
-    
-    # Pipeline oluştur
-    pipeline = Pipeline(config)
-    
-    # Video işle (veya webcam)
-    # pipeline.process_video("input.mp4", "outputs/output.mp4")
-    pipeline.process_webcam(0)
-
-
-if __name__ == "__main__":
-    main()
+# Main kısmı aynı kalabilir...
