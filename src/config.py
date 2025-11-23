@@ -80,7 +80,8 @@ class AppConfig:
 
     frame_skip: int = 1  # Her N frame'i işle (FPS artırmak için)
     target_fps: int = 30
-    #... diğer ayarlar ...
+
+    roi_percent: tuple[float, float, float, float] = None # (20, 30, 40, 70)
 
 def load_configuration() -> AppConfig:
     """
@@ -109,18 +110,29 @@ def load_configuration() -> AppConfig:
     parser.add_argument("--output_path", type=str, default=None, help="İşlenmiş videonun kaydedildiği dosyasının yolu")
     parser.add_argument("--conf", type=float, default=None, help="Güven eşiği (confidence threshold)")
 
+    # nargs=4: Kullanıcının peş peşe 4 değer girmesini zorunlu kılar.
+    # type=float: Hepsinin sayı olmasını sağlar.    
+    parser.add_argument("--roi", type=float, nargs=4, default=None, 
+                        metavar=('X', 'Y', 'W', 'H'),
+                        help="ROI alanı yüzdeleri (0.0-1.0 arası) px, py, pw, ph. Örn: --roi 0.1 0.1 0.5 0.5")
+
     args = parser.parse_args()
 
     # Adım 3: Hiyerarşiyi uygulayarak nihai konfigürasyonu oluştur
     
     # .env'den veya varsayılandan gelen değeri al, sonra komut satırı ile ez (override)
     model_path, input_video_path, output_video_path = get_paths(args)
+
+    # ROI'yi parse et (Hem CLI hem .env desteği için helper fonksiyon)
+    roi_values = get_roi_values(args)
+
     config = AppConfig(
         device=args.device or os.getenv("DEVICE", "cpu"),
         model_path=model_path,
         input_video_path=input_video_path,
         output_video_path=output_video_path,
         confidence_threshold=args.conf or float(os.getenv("CONFIDENCE_THRESHOLD", 0.5)),
+        roi_percent=roi_values  # Tuple olarak atandı
     )
 
     # input_video_path '0' ise int'e çevir
@@ -147,3 +159,28 @@ def get_paths(args):
     output_video_path = os.path.join(project_root, output_video_path_from_root, output_video_path_name)
 
     return model_path, input_video_path, output_video_path
+
+
+def get_roi_values(args) -> tuple[float, float, float, float] | None:
+    """
+    ROI değerlerini önce argümanlardan, yoksa .env dosyasından alır.
+    """
+    # 1. Öncelik: Komut Satırı (CLI)
+    if args.roi is not None:
+        # args.roi zaten [0.1, 0.1, 0.5, 0.5] şeklinde bir liste gelir (nargs=4 sayesinde)
+        return tuple(args.roi)
+    
+    # 2. Öncelik: .env dosyası
+    env_roi = os.getenv("ROI_PERCENT") # Örn: "0.2,0.2,0.6,0.6" string olarak gelir
+    if env_roi:
+        try:
+            # String'i virgüllerden ayırıp float'a çeviriyoruz
+            values = [float(x.strip()) for x in env_roi.split(',')]
+            if len(values) == 4:
+                return tuple(values)
+            else:
+                print("UYARI: .env dosyasındaki ROI formatı hatalı. 4 değer gerekli. ROI devre dışı.")
+        except ValueError:
+            print("UYARI: .env dosyasındaki ROI sayısal değil. ROI devre dışı.")
+            
+    return None

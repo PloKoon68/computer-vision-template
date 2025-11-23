@@ -1,69 +1,52 @@
+# pipeline_functions/preprocessor.py
+
 import cv2
 import numpy as np
-from typing import Tuple, Optional
+from typing import Optional
 
 class FramePreprocessor:
-    """
-    Görüntü ön işleme işlemlerini yöneten sınıf.
-    SRP: Sadece görüntü manipülasyonundan sorumlu.
-    """
-    def __init__(self, 
-                 roi_area: Optional[Tuple[int, int, int, int]] = None, 
-                 use_clahe: bool = False, 
-                 gamma_value: float = 1.0):
-        """
-        Args:
-            roi_area: (x, y, w, h) formatında ilgi alanı. None ise tüm frame.
-            use_clahe: Kontrast eşitleme açılsın mı?
-            gamma_value: Parlaklık ayarı (1.0 = normal, <1 koyu, >1 parlak)
-        """
-        self.roi_area = roi_area
+    def __init__(self,                 
+                 roi_percent: Optional[tuple[float, float, float, float]] = None,  #px, py, pw, ph
+                 use_clahe: bool = False):
+        self.roi_percent = roi_percent
         self.use_clahe = use_clahe
-        self.gamma_value = gamma_value
         
-        # CLAHE objesini BİR KERE oluşturuyoruz (Loop içinde değil!)
         if self.use_clahe:
             self.clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
 
-    def process(self, frame: np.ndarray) -> Tuple[np.ndarray, int, int]:
+    def process(self, frame: np.ndarray) -> tuple[np.ndarray, Optional[tuple]]:
         """
-        Frame'i işle ve ROI offset değerlerini döndür.
-        
         Returns:
-            processed_frame: İşlenmiş (veya kırpılmış) görüntü
-            offset_x: ROI x başlangıcı (Koordinat düzeltmesi için)
-            offset_y: ROI y başlangıcı
+            processed_frame: İşlenmiş görüntü
+            roi_rect: (x, y, w, h) pixel değerleri veya None
         """
-        # 1. ROI İşlemi (En başta yapılır ki diğer işlemler küçük resme uygulansın -> HIZ)
-        offset_x, offset_y = 0, 0
-        
+        h, w = frame.shape[:2]
         processed_frame = frame
-        
-        if self.roi_area:
-            x, y, w, h = self.roi_area
-            # Görüntü sınırlarını kontrol et
-            img_h, img_w = frame.shape[:2]
-            # Güvenli crop (resim dışına taşmayı önle)
-            x = max(0, min(x, img_w))
-            y = max(0, min(y, img_h))
-            # Crop yap
-            processed_frame = frame[y:y+h, x:x+w]
-            offset_x, offset_y = x, y
+        roi_rect = None # Varsayılan (ROI yoksa)
 
-        # 2. Gamma Correction (Eğer default 1.0 değilse)
-        if self.gamma_value != 1.0:
-            # Lookup table yöntemi (Hızlıdır)
-            inv_gamma = 1.0 / self.gamma_value
-            table = np.array([((i / 255.0) ** inv_gamma) * 255
-                              for i in np.arange(0, 256)]).astype("uint8")
-            processed_frame = cv2.LUT(processed_frame, table)
+        # 1. ROI Hesaplama
+        if self.roi_percent:
+            px, py, pw, ph = self.roi_percent
+            x = int(px * w / 100)
+            y = int(py * h / 100)
+            width = int(pw * w / 100) 
+            height = int(ph * h / 100)
+            
+            # Sınır kontrolleri
+            x = max(0, min(x, w))
+            y = max(0, min(y, h))
+            
+            # ROI Rect oluştur (Dönüş değeri için)
+            roi_rect = (x, y, width, height)
+            
+            # Kırpma
+            processed_frame = frame[y:y+height, x:x+width]
 
-        # 3. CLAHE (Kontrast)
+        # 2. CLAHE
         if self.use_clahe:
-            # CLAHE renkli resme direkt uygulanmaz, LAB uzayına geçilir
             lab = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2LAB)
             l, a, b = cv2.split(lab)
             l_eq = self.clahe.apply(l)
             processed_frame = cv2.cvtColor(cv2.merge((l_eq, a, b)), cv2.COLOR_LAB2BGR)
 
-        return processed_frame, offset_x, offset_y
+        return processed_frame, roi_rect

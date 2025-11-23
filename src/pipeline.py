@@ -7,8 +7,6 @@ import numpy as np
 
 # Config, Detector ve Tracker'ın import edildiğini varsayıyoruz
 from config import AppConfig
-from pipeline_functions.detector import YOLODetector
-from pipeline_functions.tracker import SORTTracker
 
 # Basit bir logger yapılandırması (Sınav için hayat kurtarır)
 logging.basicConfig(
@@ -20,11 +18,13 @@ logger = logging.getLogger(__name__)
 class Pipeline:
     """Video işleme pipeline'ı"""
     
-    def __init__(self, detector, tracker):
+    def __init__(self, preprocessor, detector, tracker, visualizer):
         
         logger.info(f"Pipeline başlatılıyor...")
+        self.preprocessor = preprocessor
         self.detector = detector
         self.tracker = tracker   
+        self.visualizer = visualizer
 
     def process_video(self, input_path: str, output_path: Optional[str] = None, frame_skip: int = 1, show_display: bool = False):
         """
@@ -125,14 +125,24 @@ class Pipeline:
             logger.info(f"🏁 İşlem Bitti. Toplam Süre: {total_time:.1f}s | Ortalama FPS: {processed_count/total_time:.2f}")
 
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, int, int]:
-        """Tek kare işleme mantığı"""
-        # Deteksiyon
-        detections = self.detector.detect(frame)
-        # Takip
+        
+        # 1. PREPROCESS
+        # Bize işlenmiş küçük resim ve offset lazım
+        proc_frame, roi_rect = self.preprocessor.process(frame)
+        
+        # 2. DETECT
+        # Dönen sonuçlar küçük resme göre (Local Coordinates)
+        detections = self.detector.detect(proc_frame)
+        
+        # 3. TRACK
         tracks = self.tracker.update(detections)
-        # Çizim
-        viz_frame = self.tracker.draw_tracks(frame, tracks)
+        
+        # 4. VISUALIZE
+        # Çizim sınıfına "Global Frame"i, "Local Track"leri ve "Offset" bilgisini (ROI) veriyoruz.
+        viz_frame = self.visualizer.draw_results(
+            frame=frame, 
+            tracks=tracks, 
+            roi_rect=roi_rect # İçinde (offset_x, offset_y, w, h)
+        )
         
         return viz_frame, len(detections), len(tracks)
-
-# Main kısmı aynı kalabilir...

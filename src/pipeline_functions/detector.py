@@ -1,7 +1,6 @@
 """
 YOLO tabanlı nesne tespit modülü
 """
-import os
 import numpy as np
 import cv2
 import torch
@@ -48,12 +47,9 @@ class YOLODetector:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         
         # Model dosyasının varlığını kontrol et (otomatik indirmeyi engellemek için)
-        self.model_available_check(model_path)
-        
-        # YOLO modelini yükle
-        # Not: Dosya kontrolü yapıldığı için YOLO otomatik indirme yapmayacak
-        self.model = YOLO(model_path)
+        self.upload_model(model_path)   #self.model
         self.model.to(device)
+
         self.confidence_threshold = confidence_threshold
         self.device = device
         self.target_classes = target_classes
@@ -125,10 +121,10 @@ class YOLODetector:
         
         return frame_copy
     
-    def model_available_check(self, model_path:str):
+    def upload_model(self, model_path:str):
         try:
             # Şimdi modele tam ve doğru yolu veriyoruz.
-            model = YOLO(model_path)
+            self.model = YOLO(model_path)
             print(f"✅ '{model_path}' adresindeki yerel model başarıyla yüklendi!")
 
         except FileNotFoundError:
