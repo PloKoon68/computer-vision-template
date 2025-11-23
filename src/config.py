@@ -78,7 +78,7 @@ class AppConfig:
     output_video_path: str = ""
     
 
-    frame_skip: int = 10  # Her N frame'i işle (FPS artırmak için)
+    frame_skip: int = 1  # Her N frame'i işle (FPS artırmak için)
     target_fps: int = 30
     #... diğer ayarlar ...
 

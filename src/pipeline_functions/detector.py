@@ -48,7 +48,6 @@ class YOLODetector:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         
         # Model dosyasının varlığını kontrol et (otomatik indirmeyi engellemek için)
-        print("checking: ", model_path)
         self.model_available_check(model_path)
         
         # YOLO modelini yükle
