@@ -1,0 +1,16 @@
+{
+    "timestamp": "2025-11-24 20:49:55",
+    "duration_seconds": 25.51,
+    "total_frames_processed": 319,
+    "average_fps": 12.5,
+    "total_unique_objects": 26,
+    "class_breakdown": {
+        "0": 12,
+        "2": 14
+    },
+    "performance": {
+        "min_latency_ms": 31.61,
+        "max_latency_ms": 118.2,
+        "avg_latency_ms": 67.73
+    }
+}

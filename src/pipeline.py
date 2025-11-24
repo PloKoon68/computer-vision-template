@@ -5,8 +5,7 @@ import logging
 from typing import Optional, Tuple
 import numpy as np
 
-# Config, Detector ve Tracker'ın import edildiğini varsayıyoruz
-from config import AppConfig
+
 
 # Basit bir logger yapılandırması (Sınav için hayat kurtarır)
 logging.basicConfig(
@@ -18,15 +17,16 @@ logger = logging.getLogger(__name__)
 class Pipeline:
     """Video işleme pipeline'ı"""
     
-    def __init__(self, preprocessor, detector, tracker, visualizer):
+    def __init__(self, preprocessor, detector, tracker, visualizer, analytics):
         
         logger.info(f"Pipeline başlatılıyor...")
         self.preprocessor = preprocessor
         self.detector = detector
         self.tracker = tracker   
         self.visualizer = visualizer
+        self.analytics = analytics
 
-    def process_video(self, input_path: str, output_path: Optional[str] = None, frame_skip: int = 1, show_display: bool = False):
+    def process_video(self, input_path: str, output_dir: Optional[str] = None, frame_skip: int = 1, show_display: bool = False):
         """
         Video dosyasını işle.
         show_display: False yapılırsa sunucu modunda (GUI olmadan) çalışır.
@@ -53,12 +53,12 @@ class Pipeline:
         logger.info(f"Video: {width}x{height} @ {fps:.2f}fps -> İşlenen: {output_fps:.2f}fps")
         
         writer = None
-        if output_path:
+        if output_dir:
             # 1. Klasör Kontrolü (KRİTİK)
-            output_dir = os.path.dirname(output_path)
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir)
                 logger.info(f"Klasör oluşturuldu: {output_dir}")
+            output_path = os.path.join(output_dir,'processed_video.mp4')
 
             # 2. Codec Denemeleri
             codecs_to_try = [
@@ -122,27 +122,35 @@ class Pipeline:
             cv2.destroyAllWindows()
             
             total_time = time.time() - start_process_time
+            self.analytics.save_report()
             logger.info(f"🏁 İşlem Bitti. Toplam Süre: {total_time:.1f}s | Ortalama FPS: {processed_count/total_time:.2f}")
 
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, int, int]:
-        
+        start_time = time.time() # start time
+
         # 1. PREPROCESS
         # Bize işlenmiş küçük resim ve offset lazım
         proc_frame, roi_rect = self.preprocessor.process(frame)
         
         # 2. DETECT
-        # Dönen sonuçlar küçük resme göre (Local Coordinates)
-        detections = self.detector.detect(proc_frame)
+        detections = self.detector.detect(proc_frame) # Dönen sonuçlar küçük resme göre (Local Coordinates)
         
         # 3. TRACK
         tracks = self.tracker.update(detections)
         
+        # calculate duration
+        process_duration = time.time() - start_time
+        self.analytics.update(tracks, process_duration)
+
         # 4. VISUALIZE
         # Çizim sınıfına "Global Frame"i, "Local Track"leri ve "Offset" bilgisini (ROI) veriyoruz.
+        metrics = self.analytics.get_metrics() # {"fps": 24.5, "total": 5...}
         viz_frame = self.visualizer.draw_results(
             frame=frame, 
             tracks=tracks, 
-            roi_rect=roi_rect # İçinde (offset_x, offset_y, w, h)
+            roi_rect=roi_rect, # İçinde (offset_x, offset_y, w, h)
+            fps=metrics["fps"], # Visualizer'da bu parametreyi ekleyeceğiz
+            count=metrics["total_unique_objects"] # Bunu da ekleyelim
         )
         
         return viz_frame, len(detections), len(tracks)

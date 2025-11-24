@@ -7,7 +7,8 @@ class FrameVisualizer:
     def __init__(self):
         self.colors = np.random.randint(0, 255, (1000, 3)).tolist()
 
-    def draw_results(self, frame: np.ndarray, tracks: list, roi_rect: tuple = None) -> np.ndarray:
+    def draw_results(self, frame: np.ndarray, tracks: list, roi_rect: tuple = None,
+                     fps: float = 0.0, count: int = 0) -> np.ndarray:
         """
         Args:
             frame: Orijinal Global Frame
@@ -54,5 +55,16 @@ class FrameVisualizer:
             
             cv2.putText(viz_frame, label, (gx1, gy1 - 5), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+
+
+        #fps - counter
+        cv2.rectangle(viz_frame, (0, 0), (250, 80), (0, 0, 0), -1)
+        cv2.rectangle(viz_frame, (0, 0), (250, 80), (255, 255, 255), 2) # Beyaz çerçeve
+        # FPS Yazısı
+        cv2.putText(viz_frame, f"FPS: {fps:.1f}", (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        # Sayaç Yazısı
+        cv2.putText(viz_frame, f"Count: {count}", (10, 65), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 200, 255), 2)
 
         return viz_frame
