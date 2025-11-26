@@ -18,6 +18,8 @@ venv/
 *.pt
 *.mp4
 
+data/outputs/videos/*
+
 
 # Docker
 dockerfile

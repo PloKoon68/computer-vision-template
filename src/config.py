@@ -3,6 +3,7 @@ import os
 import argparse
 from typing import Optional, Tuple, Dict
 from dotenv import load_dotenv
+from datetime import datetime
 
 @dataclass
 class AppConfig:
@@ -100,7 +101,8 @@ def get_paths(args) -> Dict[str, str]:
     input_video_name = args.input or os.getenv("INPUT_VIDEO_NAME", "")
     input_video_path = os.path.join(project_root, input_video_dir, input_video_name+'.mp4')
 
-    output_relative_dir = args.output_dir or os.getenv("OUTPUT_VIDEO_RELATIVE_DIR", f"data/output/videos/{input_video_name}")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_relative_dir = args.output_dir or os.getenv("OUTPUT_VIDEO_RELATIVE_DIR", f"data/output/videos/{input_video_name}/{timestamp}")
     output_dir = os.path.join(project_root, output_relative_dir)
     #print("her: ", os.listdir(output_dir))
     return {
