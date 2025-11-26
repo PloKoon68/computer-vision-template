@@ -28,11 +28,10 @@ class Pipeline:
         self.visualizer = visualizer
         self.analytics = analytics
 
-    def process_video(self, input_path: str, output_path: Optional[str] = None, frame_skip: int = 1, show_display: bool = False):
-        """
-        Video dosyasını işle.
-        show_display: False yapılırsa sunucu modunda (GUI olmadan) çalışır.
-        """
+    def process_video(self, input_path: str, output_dir: Optional[str] = None, frame_skip: int = 1, show_display: bool = False):
+        
+        # 1. PATH DÜZELTME (Windows için kritik)
+        input_path = os.path.abspath(input_path)
         if not os.path.exists(input_path):
             raise FileNotFoundError(f"Giriş videosu bulunamadı: {input_path}")
 
@@ -40,44 +39,60 @@ class Pipeline:
         if not cap.isOpened():
             raise ValueError(f"Video açılamadı: {input_path}")
         
-        # Video bilgileri
+        # 2. VİDEO BİLGİLERİ (Integer olduğundan emin oluyoruz)
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        # Güvenli Frame Skip
-        skip_rate = frame_skip # Config'de yoksa 1 al
-        if skip_rate < 1: skip_rate = 1
-
+        # Frame Skip Ayarı
+        skip_rate = int(max(1, frame_skip)) # En az 1 olsun ve int olsun
         output_fps = fps / skip_rate
         
-        logger.info(f"Video: {width}x{height} @ {fps:.2f}fps -> İşlenen: {output_fps:.2f}fps")
-        
-        writer = None
-        if output_path:
-            # 1. Klasör Kontrolü (KRİTİK)
-            output_dir = os.path.dirname(output_path)
-            if output_dir and not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-                logger.info(f"Klasör oluşturuldu: {output_dir}")
+        # Log basalım (Boyutlar 0 gelirse hata var demektir)
+        logger.info(f"Video Açıldı: {width}x{height} @ {fps:.2f}fps -> Çıktı: {output_fps:.2f}fps")
+        if width == 0 or height == 0:
+            raise ValueError("Video boyutları okunamadı (0x0). Video bozuk olabilir.")
 
-            # 2. Codec Denemeleri
-            codecs_to_try = [
-                ('mp4v', cv2.VideoWriter_fourcc(*'mp4v')),
-                ('avc1', cv2.VideoWriter_fourcc(*'avc1')),
-                ('XVID', cv2.VideoWriter_fourcc(*'XVID')),
+        writer = None
+        
+        # 3. WRITER BAŞLATMA (Döngülü ve Garantili)
+        if output_dir:
+            # Klasör yolunu temizle ve oluştur
+            output_dir = os.path.abspath(output_dir)
+            os.makedirs(output_dir, exist_ok=True)
+
+            # Denenecek codec'ler (Senin çalıştığını söylediğin liste)
+            # Not: 'mp4v' Windows'ta en güvenlisidir.
+            codecs = [
+                ('mp4v', 'processed_video.mp4'),
+                ('avc1', 'processed_video.mp4'),
+                ('XVID', 'processed_video.avi'), # MP4 değil AVI deniyoruz XVID için
+                ('MJPG', 'processed_video.avi')  # En son çare
             ]
-            
-            for codec_name, fourcc in codecs_to_try:
-                temp_writer = cv2.VideoWriter(output_path, fourcc, output_fps, (width, height))
-                if temp_writer.isOpened():
-                    writer = temp_writer
-                    logger.info(f"✅ Video codec seçildi: {codec_name}")
-                    break
-            
-            if not writer:
-                logger.warning("⚠️ Video writer başlatılamadı, kayıt yapılmayacak!")
+
+            for codec_name, filename in codecs:
+                fourcc = cv2.VideoWriter_fourcc(*codec_name)
+                save_path = os.path.join(output_dir, filename)
+                
+                try:
+                    temp_writer = cv2.VideoWriter(save_path, fourcc, output_fps, (width, height))
+                    
+                    if temp_writer.isOpened():
+                        writer = temp_writer
+                        logger.info(f"✅ Video Writer Başladı: {save_path} ({codec_name})")
+                        break # Başarılı olduysa döngüden çık
+                    else:
+                        logger.warning(f"⚠️ Codec başarısız: {codec_name}")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Writer hatası ({codec_name}): {e}")
+
+            if writer is None:
+                logger.error("❌ HATA: Hiçbir codec ile kayıt başlatılamadı. Çıktı klasörüne yazma izni olmayabilir.")
+
+        # ... (Buradan sonrası aynı: frame_idx = 0, while True döngüsü...)
+
 
         frame_idx = 0
         processed_count = 0
@@ -125,6 +140,9 @@ class Pipeline:
             
             total_time = time.time() - start_process_time
             logger.info(f"🏁 İşlem Bitti. Toplam Süre: {total_time:.1f}s | Ortalama FPS: {processed_count/total_time:.2f}")
+    
+            self.analytics.save_report()
+
 
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, int, int]:
         # Süre ölçümü başlat
@@ -156,5 +174,5 @@ class Pipeline:
             fps=metrics["fps"], # Visualizer'da bu parametreyi ekleyeceğiz
             count=metrics["total_unique_objects"] # Bunu da ekleyelim
         )
-        
+
         return viz_frame, len(detections), len(tracks)

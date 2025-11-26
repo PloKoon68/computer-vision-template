@@ -1,6 +1,5 @@
 import time
 import json
-import csv
 from collections import defaultdict
 from typing import Dict
 import os
@@ -10,9 +9,7 @@ class AnalyticsManager:
     Sistemin performans ve sayım metriklerini tutan sınıf.
     """
     def __init__(self, output_dir: str = "outputs"):
-        self.output_dir = output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
-        
+        self.output_dir = output_dir        
         # Metrikler
         self.start_time = time.time()
         self.total_frames = 0
@@ -76,6 +73,7 @@ class AnalyticsManager:
         # Sınıf bazlı sayımları sayıya çevir (Set -> Int)
         class_counts = {cls_id: len(ids) for cls_id, ids in self.unique_counts.items()}
         
+      
         report = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "duration_seconds": round(total_duration, 2),
@@ -91,6 +89,7 @@ class AnalyticsManager:
         }
         
         # JSON Kaydet
+        os.makedirs(self.output_dir, exist_ok=True)
         file_path = os.path.join(self.output_dir, filename)
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(report, f, indent=4, ensure_ascii=False)
