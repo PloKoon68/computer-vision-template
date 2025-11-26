@@ -16,7 +16,6 @@ venv/
 
 #don't push model and video files
 *.pt
-*.mp4
 
 data/outputs/videos/*
 
