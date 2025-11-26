@@ -6,7 +6,7 @@ from typing import Optional
 
 class FramePreprocessor:
     def __init__(self,                 
-                 roi_percent: Optional[tuple[float, float, float, float]] = None,  #px, py, pw, ph
+                 roi_percent: Optional[tuple[float, float, float, float]] = None,  #px, py, pw, ph (25, 25, 25, 25)
                  use_clahe: bool = False):
         self.roi_percent = roi_percent
         self.use_clahe = use_clahe

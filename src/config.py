@@ -99,11 +99,10 @@ def get_paths(args) -> Dict[str, str]:
     if args.input == '0':
         input_video_path = '0'
     else:
-        input_video_name = args.input or os.getenv("INPUT_VIDEO_NAME", "production_line")
+        input_video_name = args.input or os.getenv("INPUT_VIDEO_NAME", "")
         input_video_path = os.path.join(project_root, input_video_dir, input_video_name+'.mp4')
 
     output_dir = args.output_dir or os.getenv("OUTPUT_VIDEO_DIR", f"data/output/videos/{input_video_name}")
-
     return {
         "model_path": model_path, 
         "input_video_path": input_video_path, 

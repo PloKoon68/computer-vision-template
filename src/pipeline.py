@@ -5,7 +5,9 @@ import logging
 from typing import Optional, Tuple
 import numpy as np
 
-
+# Config, Detector ve Tracker'ın import edildiğini varsayıyoruz
+from config import AppConfig
+from pipeline_functions import analytics
 
 # Basit bir logger yapılandırması (Sınav için hayat kurtarır)
 logging.basicConfig(
@@ -26,7 +28,7 @@ class Pipeline:
         self.visualizer = visualizer
         self.analytics = analytics
 
-    def process_video(self, input_path: str, output_dir: Optional[str] = None, frame_skip: int = 1, show_display: bool = False):
+    def process_video(self, input_path: str, output_path: Optional[str] = None, frame_skip: int = 1, show_display: bool = False):
         """
         Video dosyasını işle.
         show_display: False yapılırsa sunucu modunda (GUI olmadan) çalışır.
@@ -53,12 +55,12 @@ class Pipeline:
         logger.info(f"Video: {width}x{height} @ {fps:.2f}fps -> İşlenen: {output_fps:.2f}fps")
         
         writer = None
-        if output_dir:
+        if output_path:
             # 1. Klasör Kontrolü (KRİTİK)
+            output_dir = os.path.dirname(output_path)
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir)
                 logger.info(f"Klasör oluşturuldu: {output_dir}")
-            output_path = os.path.join(output_dir,'processed_video.mp4')
 
             # 2. Codec Denemeleri
             codecs_to_try = [
@@ -122,25 +124,27 @@ class Pipeline:
             cv2.destroyAllWindows()
             
             total_time = time.time() - start_process_time
-            self.analytics.save_report()
             logger.info(f"🏁 İşlem Bitti. Toplam Süre: {total_time:.1f}s | Ortalama FPS: {processed_count/total_time:.2f}")
 
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, int, int]:
-        start_time = time.time() # start time
+        # Süre ölçümü başlat
+        start_time = time.time()
 
         # 1. PREPROCESS
-        # Bize işlenmiş küçük resim ve offset lazım
-        proc_frame, roi_rect = self.preprocessor.process(frame)
+        proc_frame, roi_rect = self.preprocessor.process(frame)  # Bize işlenmiş küçük resim ve offset lazım
         
         # 2. DETECT
-        detections = self.detector.detect(proc_frame) # Dönen sonuçlar küçük resme göre (Local Coordinates)
+        # Dönen sonuçlar küçük resme göre (Local Coordinates)
+        detections = self.detector.detect(proc_frame)
         
         # 3. TRACK
         tracks = self.tracker.update(detections)
         
-        # calculate duration
+        # YENİ: Analitik güncelleme (İşlem süresini hesapla)
         process_duration = time.time() - start_time
         self.analytics.update(tracks, process_duration)
+
+
 
         # 4. VISUALIZE
         # Çizim sınıfına "Global Frame"i, "Local Track"leri ve "Offset" bilgisini (ROI) veriyoruz.
