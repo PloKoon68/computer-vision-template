@@ -43,6 +43,8 @@ class YOLODetector:
             target_classes: Tespit edilecek sınıflar [0,1,2...] veya None (hepsi)
         """
         # Cihaz otomatik algılama: CUDA varsa kullan, yoksa CPU
+        print("\n\n#####################\n\n so device is: ", device)
+
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             print("\n\n#####################\n\n so device is: ", device)

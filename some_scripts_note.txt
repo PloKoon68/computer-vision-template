@@ -1,4 +1,6 @@
 #for installing right torch version for cuda utilization
+pip uninstall torch torchvision torchaudio -y
+pip cache purge 
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 
@@ -7,3 +9,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 docker build -t vision-app .
 # Run (GPU erişimi vererek)
 docker run --gpus all -p 8000:8000 vision-app
+
+
+#sample run of main.py
+python src/main.py --model yolov8m.pt --input production_line --roi 10 15 80 80

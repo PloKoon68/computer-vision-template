@@ -19,8 +19,7 @@ def main():
     preprocessor = FramePreprocessor(cfg.roi_percent)
     detector = YOLODetector(
         model_path=cfg.paths['model_path'],
-        confidence_threshold=cfg.confidence_threshold,
-        device=cfg.device
+        confidence_threshold=cfg.confidence_threshold
     )
     tracker = SORTTracker(
         max_age=cfg.max_age,

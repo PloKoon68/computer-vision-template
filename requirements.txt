@@ -3,3 +3,17 @@ opencv-python
 numpy
 python-dotenv
 pytest
+
+opencv-python
+ultralytics
+numpy
+pandas
+diffusers
+transformers
+accelerate
+python-multipart
+fastapi
+uvicorn
+python-dotenv
+pytest
+scipy
