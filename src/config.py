@@ -56,6 +56,8 @@ def load_configuration() -> AppConfig:
 
     args = parser.parse_args()
 
+    import torch
+    print(torch.cuda.is_available())
     # Yolları hesapla
     paths_dict = get_paths(args)
     
@@ -88,6 +90,7 @@ def load_configuration() -> AppConfig:
 
     return config
 
+
 def get_paths(args) -> Dict[str, str]:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -104,7 +107,6 @@ def get_paths(args) -> Dict[str, str]:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_relative_dir = args.output_dir or os.getenv("OUTPUT_VIDEO_RELATIVE_DIR", f"data/output/videos/{input_video_name}/{timestamp}")
     output_dir = os.path.join(project_root, output_relative_dir)
-    #print("her: ", os.listdir(output_dir))
     return {
         "model_path": model_path, 
         "input_video_path": input_video_path, 

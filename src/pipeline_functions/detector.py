@@ -45,7 +45,8 @@ class YOLODetector:
         # Cihaz otomatik algılama: CUDA varsa kullan, yoksa CPU
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+            print("\n\n#####################\n\n so device is: ", device)
+
         # Model dosyasının varlığını kontrol et (otomatik indirmeyi engellemek için)
         self.upload_model(model_path)   #self.model
         self.model.to(device)

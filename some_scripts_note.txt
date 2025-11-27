@@ -1,0 +1,9 @@
+#for installing right torch version for cuda utilization
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+
+#docker build:
+# Build
+docker build -t vision-app .
+# Run (GPU erişimi vererek)
+docker run --gpus all -p 8000:8000 vision-app
